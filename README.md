@@ -1,4 +1,4 @@
-# PayWeb_NopCommerce
+# PayWeb_NopCommerce_3
 ## DPO PayGate PayWeb3 NopCommerce plugin v1.1.1 for NopCommerce v3.90
 
 This is the DPO PayGate PayWeb3 plugin for NopCommerce. Please feel free to contact the DPO PayGate support team at support@paygate.co.za should you require any assistance.
