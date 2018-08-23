@@ -1,0 +1,9 @@
+Group: Payment methods
+FriendlyName: PayGate
+SystemName: Payments.PayGate
+Version: 1.1.1
+SupportedVersions: 3.90
+Author: App Inlet (Pty) Ltd
+DisplayOrder: 1
+FileName: Nop.Plugin.Payments.PayGate.dll
+Description: PayGate Payment Gateway Plugin for nopCommerce 3.9 by App Inlet (Pty) Ltd
