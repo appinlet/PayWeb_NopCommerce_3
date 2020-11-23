@@ -6,7 +6,7 @@ This is the PayGate PayWeb3 plugin for NopCommerce. Please feel free to contact 
 ## Installation
 [![How To Setup PayGate PayWeb for NopCommerce 3.9](https://www.appinlet.com/wp-content/uploads/2018/09/NopCommerce-3-Integration.jpg)](http://www.youtube.com/watch?v=QXE6lnb3lfc "How To Setup PayGate PayWeb for NopCommerce 3.9")
 
-Please navigate to the [releases page](https://github.com/PayGate/PayWeb_NopCommerce_3/releases), download the latest release (v1.1.1) and unzip. You will them be able to follow the integration guide PDF which is included in the zip.
+Please navigate to the [releases page](https://github.com/PayGate/PayWeb_NopCommerce_3/releases), download the latest release (v1.1.1) and unzip. You will then be able to follow the integration guide PDF which is included in the zip.
 
 ## Collaboration
 
