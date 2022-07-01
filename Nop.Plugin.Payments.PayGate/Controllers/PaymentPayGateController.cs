@@ -35,6 +35,7 @@ namespace Nop.Plugin.Payments.PayGate.Controllers
         private readonly IWebHelper _webHelper;
         private readonly PaymentSettings _paymentSettings;
         private readonly PayGatePaymentSettings _payGatePaymentSettings;
+        private readonly IShoppingCartService _shoppingCartService;
 
         public PaymentPayGateController(IWorkContext workContext,
             IStoreService storeService, 
@@ -47,7 +48,8 @@ namespace Nop.Plugin.Payments.PayGate.Controllers
             ILogger logger, 
             IWebHelper webHelper,
             PaymentSettings paymentSettings,
-            PayGatePaymentSettings payGatePaymentSettings)
+            PayGatePaymentSettings payGatePaymentSettings,
+            IShoppingCartService shoppingCartService)
         {
             this._workContext = workContext;
             this._storeService = storeService;
@@ -61,6 +63,7 @@ namespace Nop.Plugin.Payments.PayGate.Controllers
             this._webHelper = webHelper;
             this._paymentSettings = paymentSettings;
             this._payGatePaymentSettings = payGatePaymentSettings;
+            this._shoppingCartService = shoppingCartService;
         }
         
         [AdminAuthorize]
@@ -310,6 +313,18 @@ namespace Nop.Plugin.Payments.PayGate.Controllers
                 _orderProcessingService.CancelOrder(order, false);
                 order.OrderNotes.Add(_note);
                 _orderService.UpdateOrder(order);
+
+                var customer = order.Customer;
+
+                // Recreate cart contents
+                var items = order.OrderItems.ToArray();
+                for (int i = 0; i < order.OrderItems.Count; i++)
+                {
+                    OrderItem item = items[i];
+                    var product = item.Product;
+                    int OrderItemQuantity = item.Quantity;
+                    this._shoppingCartService.AddToCart(customer, product, ShoppingCartType.ShoppingCart, order.StoreId, null, (decimal)0.0 , null, null, OrderItemQuantity);
+                }
                 return RedirectToAction(order.Id.ToString().Trim(), "orderdetails");               
             }
             //return RedirectToAction("Index", "Home", new { area = "" });

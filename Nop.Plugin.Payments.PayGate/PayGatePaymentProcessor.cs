@@ -47,6 +47,7 @@ namespace Nop.Plugin.Payments.PayGate
         private readonly ILogger _logger;
         private readonly IOrderService _orderService;
         private readonly IStoreContext _storeContext;
+        private IShoppingCartService _shoppingCartService;
         #endregion
 
         #region Ctor
@@ -57,7 +58,7 @@ namespace Nop.Plugin.Payments.PayGate
             ICheckoutAttributeParser checkoutAttributeParser, ITaxService taxService,
             IOrderTotalCalculationService orderTotalCalculationService, ILocalizationService localizationService,
             HttpContextBase httpContext, ILogger logger, IOrderService orderService,
-            IStoreContext storeContext)
+            IStoreContext storeContext, IShoppingCartService shoppingCartService)
         {
             this._storeContext = storeContext;
             this._logger = logger;
@@ -72,6 +73,7 @@ namespace Nop.Plugin.Payments.PayGate
             this._localizationService = localizationService;
             this._httpContext = httpContext;
             this._orderService = orderService;
+            this._shoppingCartService = shoppingCartService;
         }
 
         #endregion
@@ -102,6 +104,7 @@ namespace Nop.Plugin.Payments.PayGate
         {
             var orderTotal = Math.Round(postProcessPaymentRequest.Order.OrderTotal, 2);
             var currentOrder = _orderService.GetOrderById(postProcessPaymentRequest.Order.Id);
+            //_logger.InsertLog(LogLevel.Debug, "In process payment. Order ID " + postProcessPaymentRequest.Order.Id + " Order value: " + orderTotal);
             using (var client = new WebClient())
             {
                 var initiateData = new NameValueCollection();
@@ -113,30 +116,58 @@ namespace Nop.Plugin.Payments.PayGate
                 initiateData["RETURN_URL"] = _webHelper.GetStoreLocation(false) + "Plugins/PaymentPayGate/PayGateReturnHandler?pgnopcommerce=" + postProcessPaymentRequest.Order.Id.ToString();
                 initiateData["TRANSACTION_DATE"] = String.Format("{0:yyyy-MM-dd HH:mm:ss}", DateTime.Now).ToString();
                 initiateData["LOCALE"] = "en-za";
-                initiateData["COUNTRY"] = postProcessPaymentRequest.Order.BillingAddress.Country.ThreeLetterIsoCode;
-                initiateData["EMAIL"] = postProcessPaymentRequest.Order.BillingAddress.Email;
-                initiateData["NOTIFY_URL"] = _webHelper.GetStoreLocation(false) + "Plugins/PaymentPayGate/PayGateNotifyHandler?pgnopcommerce=" + postProcessPaymentRequest.Order.Id.ToString();
+                try
+                {
+                    initiateData["COUNTRY"] = postProcessPaymentRequest.Order.BillingAddress.Country.ThreeLetterIsoCode;
+                    
+                } catch (Exception ex)
+                {
+                    _logger.InsertLog(LogLevel.Error, ex.Message);
+                    initiateData["COUNTRY"] = "ZAF";
+                }
+                try
+                {
+                    initiateData["EMAIL"] = postProcessPaymentRequest.Order.BillingAddress.Email;
+                } catch (Exception ex)
+                {
+                    _logger.InsertLog(LogLevel.Error, ex.Message);
+                    initiateData["EMAIL"] = "test@tom.com";
+                }
                 initiateData["USER3"] = "nopcommerce-v1.0.0";
 
-                string initiateValues = string.Join("", initiateData.AllKeys.Select(key => initiateData[key]));
+                var initiateValues = string.Join("", initiateData.AllKeys.Select(key => initiateData[key]));
+                //_logger.InsertLog(LogLevel.Debug, "Initiate values " + initiateValues);
 
                 initiateData["CHECKSUM"] = new PayGateHelper().CalculateMD5Hash(initiateValues + _payGatePaymentSettings.EncryptionKey);
-                var initiateResponse = client.UploadValues("https://secure.paygate.co.za/payweb3/initiate.trans", "POST", initiateData);
-                var responseText = Encoding.Default.GetString(initiateResponse);
+                //string initiateValuesCheck = string.Join("", initiateData.AllKeys.Select(key => initiateData[key]));
+                //_logger.InsertLog(LogLevel.Debug, "Initiate values check " + initiateValuesCheck);
+
+                var responseText = "";
+
+                try
+                {
+                    _logger.InsertLog(LogLevel.Debug, "Trying initiate trans with values " + initiateValues);
+                    var initiateResponse = client.UploadValues("https://secure.paygate.co.za/payweb3/initiate.trans", "POST", initiateData);
+                    responseText = Encoding.Default.GetString(initiateResponse);
+                    _logger.InsertLog(LogLevel.Debug, "Response text " + responseText);
+                } catch (Exception excep)
+                {
+                    _logger.InsertLog(LogLevel.Error, "Exception in initiate: " + excep.Message);
+                }               
 
                 if (responseText.Contains("PGID_NOT_EN") || responseText.Contains("DATA_CUR") ||
                     responseText.Contains("DATA_PW") || responseText.Contains("DATA_CHK"))
                 {
                     string Error = "Checksum posted does not match the one calculated by PayGate, either due to an incorrect encryption key used or a field that has been excluded from the checksum calculation";
-                    if (Encoding.Default.GetString(initiateResponse).Contains("PGID_NOT_EN"))
+                    if (responseText.Contains("PGID_NOT_EN"))
                     {
                         Error = "The PayGate ID being used to post data to PayGate has not yet been enabled, or there are no payment methods setup on it.";
                     }
-                    else if (Encoding.Default.GetString(initiateResponse).Contains("DATA_CUR"))
+                    else if (responseText.Contains("DATA_CUR"))
                     {
                         Error = "The currency that has been posted to PayGate is not supported.";
                     }
-                    else if (Encoding.Default.GetString(initiateResponse).Contains("DATA_PW"))
+                    else if (responseText.Contains("DATA_PW"))
                     {
                         Error = "Mandatory fields have been excluded from the post to PayGate, refer to page 9 of the documentation as to what fields should be posted.";
                     }
@@ -158,13 +189,14 @@ namespace Nop.Plugin.Payments.PayGate
                 }
                 else
                 {
-                    dictionaryResponse = Encoding.Default.GetString(initiateResponse)
+                    dictionaryResponse = responseText
                                          .Split('&')
                                          .Select(p => p.Split('='))
                                          .ToDictionary(p => p[0], p => p.Length > 1 ? Uri.UnescapeDataString(p[1]) : null);
 
                     if (dictionaryResponse["PAY_REQUEST_ID"] != null && dictionaryResponse["CHECKSUM"] != null)
                     {
+                        _logger.InsertLog(LogLevel.Debug, "Attempting remote post");
                         RemotePost remotePost = new RemotePost
                         {
                             FormName = "PayGate",
@@ -365,7 +397,7 @@ namespace Nop.Plugin.Payments.PayGate
         public string PaymentMethodDescription
         {
             //return description of this payment method to be display on "payment method" checkout step. good practice is to make it localizable
-            //for example, for a redirection payment method, description may be like this: "You will be redirected to PayGate site to complete the payment"
+            //for example, for a redirection payment method, description may be like this: "You will be redirected to PayPal site to complete the payment"
             get { return _localizationService.GetResource("Plugins.Payments.PayGate.PaymentMethodDescription"); }
         }
 
